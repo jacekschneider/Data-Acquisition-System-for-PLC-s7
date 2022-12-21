@@ -47,7 +47,7 @@ DB_NUMBER = 1
 
 dfDataBlockPLC = pd.read_excel('ExchangeData.xlsx', usecols=['Name', 'Data type', 'Offset', 'Comment'])
 
-# Add a 'Value' column
+# Add a an empty 'Value' column
 dfDataBlockPLC['Value'] = None
 
 # Prepare 'Values' data frame, offset is now the index
