@@ -1,117 +1,60 @@
+import s7broker
 import pandas as pd
-import numpy as np
-import snap7 as s7
 import time
+from threading import Thread, Event
+from queue import Queue, Empty
 
-# dataPLC = bytearray(b'\x00!\x00B27A(\x00\x00C\xa6\xaa\xa0B\xc8\xe6f\x11\x00\x00\x00\x00\x00\x00\x1d\x00\x00\x00\x00\x00\x00\x00\x00A\xf2ff\x00\x00\x00\x00\x10\x00\x00\x00\x00\x1c\x00\x00A\xf4Q\xec\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02')
-
-
-def s7FrameGetByte(frame:bytearray, index:int):
-    return frame[index]
-
-def s7FrameGetBytes(frame:bytearray, indexStart:int, indexStop:int):
-    return frame[indexStart:indexStop]
-
-def s7FrameGetBit(frame:bytearray, indexByte:int, indexBit:int):
-    byte = np.array(frame[indexByte], dtype='uint8')
-    bits = np.unpackbits(byte)
-    bit = bits[indexBit] if 0<=indexBit<=7 else None
-    return bit
-
-def s7BufferToValue(buffer, type:str):
-    value = None
-    if type=='Int':
-        value = np.frombuffer(buffer, dtype='>i2')
-    elif type=='Real':
-        value = np.frombuffer(buffer, dtype='>f')
+def consumer_thread(thread_timeout_s:float, plc_queue:Queue):
     
-    return value[0]
+    # Collect the data until queue timeout runs out
+    off_condition = False
+    while not off_condition:
+        try:
+            plc_data = plc_queue.get(timeout=thread_timeout_s)
+            if type(plc_data) is pd.DataFrame:
+                try:
+                    print(f'Tank 1 level:{plc_data.iloc[0].Value}')
+                except AttributeError:
+                    print(f'PLC data might have a wrong structure')
+            elif plc_data == 'kill consumer':
+                off_condition = True
+        except Empty: 
+            off_condition = True
+    else:
+        print('Consumer thread ended')
 
-def s7AdditionalOffset(type:str)->int:
-    additionalOffset = 0
-    if type=='Bool':
-        additionalOffset = 0
-    elif type=='Int':
-        additionalOffset = 2
-    elif type=='Real':
-        additionalOffset = 4
-        
-    return additionalOffset
-        
-        
 
 
-
-PLC_IP = '192.168.33.6'
+PLC_IP='192.168.33.6'
 DB_NUMBER = 1
+INTERVAL_S = 1
+CONSUMER_TIMEOUT_S = 10
 
-dfDataBlockPLC = pd.read_excel('ExchangeData.xlsx', usecols=['Name', 'Data type', 'Offset', 'Comment'])
+plc_queue = Queue()
+stop_event = Event()
 
-# Add a 'Value' column
-dfDataBlockPLC['Value'] = None
+# Clear logs optionally
+# s7broker.s7clear_logs('logs/plc_data.txt')
 
-# Prepare 'Values' data frame, offset is now the index
-dfValues = dfDataBlockPLC[['Offset', 'Value', 'Data type', 'Name']].copy().set_index('Offset')
+# Create a broker and use necessary functions
+broker = s7broker.Broker('ExchangeData.xlsx')
+broker.prepare_value_frame()
+broker.compute_additional_offset()
+broker.define_full_byte_range()
 
-# Depending on the type of the last value in db the max byte range is likely to change
-# additional offset prevents the problem
-lastOffset = dfValues.iloc[-1]
-lastValueType = lastOffset['Data type']
-additionalOffset = s7AdditionalOffset(lastValueType)
 
-# Define byte range to read, read it all
-offsetStart = int(dfDataBlockPLC['Offset'].min())
-offsetNumberOfBytes = int(np.ceil(dfDataBlockPLC['Offset'].max())) + additionalOffset
+broker_thread = Thread(target=broker.broker_thread, args=(PLC_IP, DB_NUMBER, INTERVAL_S, plc_queue, stop_event))
+plc_consumer_thread = Thread(target=consumer_thread, args=(CONSUMER_TIMEOUT_S, plc_queue))
 
-# Prepare plc client
-PLC = s7.client.Client()
-PLC.connect(PLC_IP, rack=0, slot=1, tcpport=102)
+broker_thread.start()
+plc_consumer_thread.start()
 
-clock = time.time()
-endThreadCondition=False;
-while not endThreadCondition:
+try:
+    while 1:
+        time.sleep(1)
+except KeyboardInterrupt:
+    stop_event.set()
+    broker_thread.join()
+    plc_consumer_thread.join()
     
-    dataPLC = PLC.read_area(area=s7.types.Areas.DB, dbnumber=DB_NUMBER, start=offsetStart, size=offsetNumberOfBytes)
-    
-    for offset in dfValues.index:
-        
-        bytesToRead = 0
-        bitsToRead = 0
-        bytes = None
-        bit = None
-        value = None
-        byteStartIndex = int(offset)
-        bitStartIndex = np.ceil((offset*10-byteStartIndex*10)).astype('uint8')
-        dataType = dfValues['Data type'].loc[offset]
-        
-        if dataType == 'Int':
-            bytesToRead = 2
-        elif dataType == 'Real':
-            bytesToRead = 4
-        elif dataType == 'Bool':
-            bitsToRead = 1
-        
-        if bytesToRead>0:
-            bytes = s7FrameGetBytes(dataPLC, byteStartIndex, byteStartIndex+bytesToRead)
-            value = s7BufferToValue(bytes, dataType)
-        elif bitsToRead==1:
-            bit = s7FrameGetBit(dataPLC, byteStartIndex, bitStartIndex)
-            value = bit
-        
-        dfValues['Value'].loc[offset] = value
-        
-
-    result = dfValues[['Value','Name']].copy().set_index('Name')
-    print(result)
-    
-    endThreadCondition = time.time()-clock>10
-    time.sleep(1)
-
-else:
-    print('Producer thread is closed!')
-
-PLC.disconnect()
-
-
-
-
+help(s7broker)
