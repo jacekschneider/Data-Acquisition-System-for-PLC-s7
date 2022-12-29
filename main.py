@@ -1,29 +1,40 @@
 import s7broker
-from threading import Thread
+import pandas as pd
+import time
+from threading import Thread, Event
 from queue import Queue, Empty
-
 
 def consumer_thread(thread_timeout_s:float, plc_queue:Queue):
     
     # Collect the data until queue timeout runs out
-    offCondition = False
-    while not offCondition:
+    off_condition = False
+    while not off_condition:
         try:
             plc_data = plc_queue.get(timeout=thread_timeout_s)
-            print(f'Tank 1 level:{plc_data.iloc[0].Value}')
-            pass
+            if type(plc_data) is pd.DataFrame:
+                try:
+                    print(f'Tank 1 level:{plc_data.iloc[0].Value}')
+                except AttributeError:
+                    print(f'PLC data might have a wrong structure')
+            elif plc_data == 'kill consumer':
+                off_condition = True
         except Empty: 
-            offCondition = True
+            off_condition = True
     else:
         print('Consumer thread ended')
+
 
 
 PLC_IP='192.168.33.6'
 DB_NUMBER = 1
 INTERVAL_S = 1
-CONSUMER_TIMEOUT_S = 3
+CONSUMER_TIMEOUT_S = 10
 
 plc_queue = Queue()
+stop_event = Event()
+
+# Clear logs optionally
+# s7broker.s7clear_logs('logs/plc_data.txt')
 
 # Create a broker and use necessary functions
 broker = s7broker.Broker('ExchangeData.xlsx')
@@ -32,14 +43,18 @@ broker.compute_additional_offset()
 broker.define_full_byte_range()
 
 
-broker_thread = Thread(target=broker.broker_thread, args=(PLC_IP, DB_NUMBER, INTERVAL_S, plc_queue))
+broker_thread = Thread(target=broker.broker_thread, args=(PLC_IP, DB_NUMBER, INTERVAL_S, plc_queue, stop_event))
 plc_consumer_thread = Thread(target=consumer_thread, args=(CONSUMER_TIMEOUT_S, plc_queue))
 
-try:
-    broker_thread.start()
-    plc_consumer_thread.start()
+broker_thread.start()
+plc_consumer_thread.start()
 
+try:
+    while 1:
+        time.sleep(1)
 except KeyboardInterrupt:
+    stop_event.set()
     broker_thread.join()
     plc_consumer_thread.join()
-
+    
+help(s7broker)
