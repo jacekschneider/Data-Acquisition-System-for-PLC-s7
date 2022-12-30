@@ -12,14 +12,13 @@ def consumer_thread(thread_timeout_s:float, plc_queue:Queue):
         try:
             plc_data = plc_queue.get(timeout=thread_timeout_s)
             if type(plc_data) is pd.DataFrame:
-                try:
-                    print(f'Tank 1 level:{plc_data.iloc[0].Value}')
-                except AttributeError:
-                    print(f'PLC data might have a wrong structure')
+                print(f'Tank 1 level:{plc_data.iloc[0].Value}')
             elif plc_data == 'kill consumer':
                 off_condition = True
         except Empty: 
             off_condition = True
+        except AttributeError:
+            print(f'PLC data might have a wrong structure')
     else:
         print('Consumer thread ended')
 
@@ -32,9 +31,6 @@ CONSUMER_TIMEOUT_S = 10
 
 plc_queue = Queue()
 stop_event = Event()
-
-# Clear logs optionally
-# s7broker.s7clear_logs('logs/plc_data.txt')
 
 # Create a broker and use necessary functions
 broker = s7broker.Broker('ExchangeData.xlsx')
@@ -50,11 +46,10 @@ broker_thread.start()
 plc_consumer_thread.start()
 
 try:
-    while 1:
+    while broker_thread.is_alive() and plc_consumer_thread.is_alive():
         time.sleep(1)
 except KeyboardInterrupt:
     stop_event.set()
     broker_thread.join()
     plc_consumer_thread.join()
     
-help(s7broker)

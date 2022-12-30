@@ -2,15 +2,34 @@ import pandas as pd
 import numpy as np
 import snap7
 import time
-import os
 from queue import Queue
 from threading import Event
+
+
+s7_bytes_to_read = {
+    'Int'  : 2,
+    'Real' : 4,
+    'Bool' : 0,
+}
+
+s7_bits_to_read = {
+    'Int'  : 0,
+    'Real' : 0,
+    'Bool' : 1,    
+}
+
+s7_additional_offset = {
+    'Int'  : 2,
+    'Real' : 4,
+    'Bool' : 0,     
+}
 
 def s7clear_logs(path:str):
     try:
         open(path,'w').close()
     except:
-        print(f'Could not clear the file on path: {path}')
+        print(f'Could not clear a file on path: {path}')
+        
 def s7frame_get_byte(buffer:bytearray, index:int):
     return buffer[index]
 
@@ -37,6 +56,34 @@ def s7buffer_to_value(buffer, type:str):
         value = np.frombuffer(buffer, dtype='>f')
     return value[0]
 
+def s7frame_extract(s7frame:bytearray, offset:float, data_type:str):
+    '''
+    Extract value from s7frame
+    Offset is an indicator for value's data type 
+    '''
+    bytes_to_read = 0
+    bits_to_read = 0
+    bytes = None
+    bit = None
+    value = None
+
+    # Separate the number and its floating point
+    byte_start_index = int(offset)
+    bit_start_index = np.ceil((offset*10-byte_start_index*10)).astype('uint8')
+
+    # Change data amount to read according to the s7 data types    
+    bytes_to_read = s7_bytes_to_read[data_type]
+    bits_to_read = s7_bits_to_read[data_type]
+    
+    # Get binary data and transform it to the actual value
+    if bytes_to_read>0:
+        bytes = s7frame_get_bytes(s7frame, byte_start_index, byte_start_index + bytes_to_read)
+        value = s7buffer_to_value(bytes, data_type)
+    elif bits_to_read==1:
+        bit = s7frame_get_bit(s7frame, byte_start_index, bit_start_index)
+        value = bit      
+    return value
+
 
 class Broker():
 
@@ -55,6 +102,9 @@ class Broker():
         '''
         self.config_file_path = config_file_path
         self.plc_client = snap7.client.Client()
+        self.additional_offset = 0
+        self.offset_start = 0
+        self.offset_stop = 0
     
     def prepare_value_frame(self):
         '''
@@ -63,66 +113,23 @@ class Broker():
         self.df_datablock_plc = pd.read_excel('ExchangeData.xlsx', usecols=['Name', 'Data type', 'Offset', 'Comment'])
         self.df_datablock_plc['Value'] = None
         self.df_values = self.df_datablock_plc[['Offset', 'Value', 'Data type', 'Name']].copy().set_index('Offset')
-        return self.df_values.copy()
     
     def compute_additional_offset(self):
         '''
         Depending on the type of the last value in datablock the max byte range is likely to change
         adjusting additional offset prevents the problem
         '''
-        additional_offset = 0
         last_offset = self.df_values.iloc[-1]
         last_value_type = last_offset['Data type']
-        
-        if last_value_type=='Bool':
-            additional_offset = 0
-        elif last_value_type=='Int':
-            additional_offset = 2
-        elif last_value_type=='Real':
-            additional_offset = 4
-
-        self.additional_offset = additional_offset    
-        return additional_offset
+        self.additional_offset = s7_additional_offset[last_value_type]  
 
     def define_full_byte_range(self):
-
-        # Define byte range to read, read it all, offset is the index
+        '''
+        Define byte range to read, read it all, offset is the index
+        '''
         self.offset_start = int(self.df_values.index.min())
         self.offset_stop = int(np.ceil(self.df_values.index.max())) + self.additional_offset
 
-    def extract_s7frame_data(self, offset:float, s7frame:bytearray):
-        '''
-        Extract value from s7frame
-        Offset is an indicator for value's data type 
-        '''
-        bytesToRead = 0
-        bitsToRead = 0
-        bytes = None
-        bit = None
-        value = None
-
-        # Separate the number and its floating point
-        byteStartIndex = int(offset)
-        bitStartIndex = np.ceil((offset*10-byteStartIndex*10)).astype('uint8')
-        dataType = self.df_values['Data type'].loc[offset]
-
-        # Change data amount to read according to the s7 data types
-        if dataType == 'Int':
-            bytesToRead = 2
-        elif dataType == 'Real':
-            bytesToRead = 4
-        elif dataType == 'Bool':
-            bitsToRead = 1
-        
-        # Get binary data and transform it to the actual value
-        if bytesToRead>0:
-            bytes = s7frame_get_bytes(s7frame, byteStartIndex, byteStartIndex+bytesToRead)
-            value = s7buffer_to_value(bytes, dataType)
-        elif bitsToRead==1:
-            bit = s7frame_get_bit(s7frame, byteStartIndex, bitStartIndex)
-            value = bit
-            
-        return value
     
     def reconnect_PLC(self, plc_ip:str):
         '''
@@ -139,13 +146,12 @@ class Broker():
         else: return self.plc_client.get_connected()
             
             
-    def broker_thread(self, plc_ip:str, datablock_number:int, interval_s:float, plc_queue:Queue, break_event:Event, start_logging:bool=False):
+    def broker_thread(self, plc_ip:str, datablock_number:int, interval_s:float, plc_queue:Queue, break_event:Event):
         '''
             Read plc data until the connection is interrupted,
             dataframe with values filled sent to queue is the result
         '''
-        broker_condition_stop = False
-        
+        broker_condition_stop = False   
         try:
             self.plc_client.connect(plc_ip, rack=0, slot=1, tcpport=102)
         except RuntimeError: 
@@ -160,15 +166,7 @@ class Broker():
                                                     dbnumber=datablock_number,
                                                     start=self.offset_start,
                                                     size=self.offset_stop
-                                                    )
-                if start_logging:
-                    try:
-                        with open('logs/plc_data.txt', 'a+') as f:
-                            f.write(str(data_plc)+'\n')
-                    except FileNotFoundError:
-                        os.mkdir('logs')
-                        
-                        
+                                                    )                        
             except RuntimeError:
                 print('Broker> Cant receive data!')
                 # Try to reconnect
@@ -177,7 +175,8 @@ class Broker():
                 
             else:
                 for offset in self.df_values.index:
-                    value = self.extract_s7frame_data(offset, data_plc)
+                    data_type = self.df_values['Data type'].loc[offset]
+                    value = s7frame_extract(data_plc, offset, data_type)
                     self.df_values['Value'].loc[offset] = value
                 result = self.df_values[['Value','Name']].copy().set_index('Name')
                 plc_queue.put_nowait(result)
