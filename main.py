@@ -1,8 +1,9 @@
 import s7broker
 import pandas as pd
 import time
-from threading import Thread, Event
+from threading import Thread
 from queue import Queue, Empty
+
 
 def consumer_thread(thread_timeout_s:float, plc_queue:Queue):
     
@@ -12,17 +13,15 @@ def consumer_thread(thread_timeout_s:float, plc_queue:Queue):
         try:
             plc_data = plc_queue.get(timeout=thread_timeout_s)
             if type(plc_data) is pd.DataFrame:
-                try:
-                    print(f'Tank 1 level:{plc_data.iloc[0].Value}')
-                except AttributeError:
-                    print(f'PLC data might have a wrong structure')
+                print(f'Tank 1 level:{plc_data.iloc[0].Value}')
             elif plc_data == 'kill consumer':
                 off_condition = True
         except Empty: 
             off_condition = True
+        except AttributeError:
+            print(f'PLC data might have wrong structure')
     else:
         print('Consumer thread ended')
-
 
 
 PLC_IP='192.168.33.6'
@@ -30,31 +29,24 @@ DB_NUMBER = 1
 INTERVAL_S = 1
 CONSUMER_TIMEOUT_S = 10
 
-plc_queue = Queue()
-stop_event = Event()
-
-# Clear logs optionally
-# s7broker.s7clear_logs('logs/plc_data.txt')
 
 # Create a broker and use necessary functions
 broker = s7broker.Broker('ExchangeData.xlsx')
-broker.prepare_value_frame()
-broker.compute_additional_offset()
-broker.define_full_byte_range()
+print(broker)
+broker.auto_config()
+broker.change_connection_options(PLC_IP, DB_NUMBER, INTERVAL_S)
 
 
-broker_thread = Thread(target=broker.broker_thread, args=(PLC_IP, DB_NUMBER, INTERVAL_S, plc_queue, stop_event))
-plc_consumer_thread = Thread(target=consumer_thread, args=(CONSUMER_TIMEOUT_S, plc_queue))
+plc_consumer_thread = Thread(target=consumer_thread, args=(CONSUMER_TIMEOUT_S, broker.broker_queue))
 
-broker_thread.start()
+broker.start()
 plc_consumer_thread.start()
 
 try:
-    while 1:
+    while broker.is_alive() and plc_consumer_thread.is_alive():
         time.sleep(1)
 except KeyboardInterrupt:
-    stop_event.set()
-    broker_thread.join()
+    broker.stop()
+    broker.join()
     plc_consumer_thread.join()
     
-help(s7broker)
