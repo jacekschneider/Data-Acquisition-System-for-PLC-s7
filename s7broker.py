@@ -171,14 +171,24 @@ class Broker(Thread):
         self.datablock_number = datablock_number
         self.interval_s = interval_s   
         
-    def verify_configuration(self):
+    def verify_config_params(self):
         assert self.df_values_created == True
         assert not self.offset_start is None
         assert not self.offset_stop is None
         assert not self.additional_offset is None
+        
+    def verify_communication_params(self):
         assert not self.plc_ip is None
         assert not self.datablock_number is None
         assert not self.interval_s is None
+        
+    def verify_configuration(self):
+        self.verify_config_params()
+        self.verify_communication_params()
+        
+    def log(self, data_plc:bytearray, path:str='plc_data.txt'):
+        with open(path, 'a+') as f:
+            f.writelines((' '.join(str(byte) for byte in list(data_plc))) + '\n')   
         
     def stop(self):
         '''
@@ -239,7 +249,9 @@ class Broker(Thread):
                                                     dbnumber=self.datablock_number,
                                                     start=self.offset_start,
                                                     size=self.offset_stop
-                                                    )                        
+                                                    )
+                # Uncomment bellow to log the data
+                # self.log(data_plc, 'logs/plc_data.txt')             
             except RuntimeError:
                 print('Broker> Cant receive data!')
                 # Try to reconnect
@@ -262,7 +274,33 @@ class Broker(Thread):
             print('Broker thread is finshed!')
             
 
-
+class BrokerSim(Broker):
+    
+    def __init__(self, logs_path:str, config_file_path:str, *args, **kwargs):
+        super().__init__(config_file_path, *args, **kwargs)
+        self.logs_path = logs_path
             
+    def run(self):   
+        try:
+            self.verify_config_params()
+            with open(self.logs_path, 'r') as log_file:
+                for line in log_file:
+                    if self.broker_stop_event.is_set() : break
+                    # Convert a single line into the actual s7frame
+                    data_plc = bytearray(map(int, line[:-1].split(' ')))
+                    for offset in self.df_values.index:
+                        data_type = self.df_values['Data type'].loc[offset]
+                        value = s7frame_extract(data_plc, offset, data_type)
+                        self.df_values['Value'].loc[offset] = value
+                    result = self.df_values[['Value','Name']].copy().set_index('Name')
+                    self.broker_queue.put_nowait(result)
+                    time.sleep(1)
+            self.broker_queue.put_nowait('kill consumer')
+            print('BrokerSim> Simulation is finished') 
+            
+        except FileNotFoundError:
+            print(f'BrokerSim> Could not find the file on path: {self.logs_path}')             
+        except AssertionError:
+            print(f'BrokerSim> Wrong configuration')
             
             
