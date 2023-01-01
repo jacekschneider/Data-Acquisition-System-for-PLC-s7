@@ -27,7 +27,6 @@ CONSUMER_TIMEOUT_S = 10
 
 broker = s7broker.BrokerSim('logs/plc_data.txt','ExchangeData.xlsx')
 broker.auto_config()
-
 plc_consumer_thread = Thread(target=consumer_thread, args=(CONSUMER_TIMEOUT_S, broker.broker_queue))
 
 broker.start()
