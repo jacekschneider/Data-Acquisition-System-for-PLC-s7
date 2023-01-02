@@ -1,26 +1,7 @@
 import s7broker
-import pandas as pd
 import time
 from threading import Thread
-from queue import Queue, Empty
-
-def consumer_thread(thread_timeout_s:float, plc_queue:Queue):
-    
-    # Collect the data until queue timeout runs out
-    off_condition = False
-    while not off_condition:
-        try:
-            plc_data = plc_queue.get(timeout=thread_timeout_s)
-            if type(plc_data) is pd.DataFrame:
-                print(f'Tank 1 level:{plc_data.iloc[0].Value}')
-            elif plc_data == 'kill consumer':
-                off_condition = True
-        except Empty: 
-            off_condition = True
-        except AttributeError:
-            print(f'PLC data might have wrong structure')
-    else:
-        print('Consumer thread ended')
+from consumer import consumer_thread
 
 
 CONSUMER_TIMEOUT_S = 10

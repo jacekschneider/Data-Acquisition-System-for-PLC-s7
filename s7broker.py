@@ -186,9 +186,9 @@ class Broker(Thread):
         self.verify_config_params()
         self.verify_communication_params()
         
-    def log(self, data_plc:bytearray, path:str='plc_data.txt'):
+    def log(self, plc_data:bytearray, path:str='plc_data.txt'):
         with open(path, 'a+') as f:
-            f.writelines((' '.join(str(byte) for byte in list(data_plc))) + '\n')   
+            f.writelines((' '.join(str(byte) for byte in list(plc_data))) + '\n')   
         
     def stop(self):
         '''
@@ -244,7 +244,7 @@ class Broker(Thread):
 
         while not broker_condition_stop and not self.broker_stop_event.is_set():
             try:
-                data_plc = self.plc_client.read_area(
+                plc_data = self.plc_client.read_area(
                                                     area=snap7.types.Areas.DB,
                                                     dbnumber=self.datablock_number,
                                                     start=self.offset_start,
@@ -261,7 +261,7 @@ class Broker(Thread):
             else:
                 for offset in self.df_values.index:
                     data_type = self.df_values['Data type'].loc[offset]
-                    value = s7frame_extract(data_plc, offset, data_type)
+                    value = s7frame_extract(plc_data, offset, data_type)
                     self.df_values['Value'].loc[offset] = value
                 result = self.df_values[['Value','Name']].copy().set_index('Name')
                 self.broker_queue.put_nowait(result)
@@ -287,10 +287,10 @@ class BrokerSim(Broker):
                 for line in log_file:
                     if self.broker_stop_event.is_set() : break
                     # Convert a single line into the actual s7frame
-                    data_plc = bytearray(map(int, line[:-1].split(' ')))
+                    plc_data = bytearray(map(int, line[:-1].split(' ')))
                     for offset in self.df_values.index:
                         data_type = self.df_values['Data type'].loc[offset]
-                        value = s7frame_extract(data_plc, offset, data_type)
+                        value = s7frame_extract(plc_data, offset, data_type)
                         self.df_values['Value'].loc[offset] = value
                     result = self.df_values[['Value','Name']].copy().set_index('Name')
                     self.broker_queue.put_nowait(result)
