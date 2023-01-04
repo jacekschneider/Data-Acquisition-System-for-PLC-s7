@@ -1,22 +1,56 @@
 import s7broker
-import time
-from threading import Thread
-from consumer import consumer_thread
+import sys
+import pyqtgraph as pg
+from PyQt6.QtWidgets import (QApplication, QWidget, QPushButton, QLabel, 
+                             QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout)
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QFont
 
 
-CONSUMER_TIMEOUT_S = 10
 
-broker = s7broker.BrokerSim('logs/plc_data.txt','ExchangeData.xlsx')
-broker.auto_config()
-plc_consumer_thread = Thread(target=consumer_thread, args=(CONSUMER_TIMEOUT_S, broker.broker_queue))
+class TankGraphWidget(QWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Utils
+        self.buffer_time = list(range(101))
+        self.buffer_pv = [i for i in self.buffer_time]
+        
+        # Prepare widgets 
+        self.widget_graph = pg.PlotWidget()
+        self.widget_graph.setYRange(0, 300)
+        self.widget_graph.setTitle('Tank', color='w', size='18pt')
+        self.widget_graph.setLabel('left',  "<span style=\"color:white;font-size:18px\">Level, cm</span>")
+        self.widget_graph.setLabel('bottom',  "<span style=\"color:white;font-size:18px\">Time, s</span>")
+        self.widget_graph.showGrid(x=True, y=True)
+        
+        self.widget_info = QWidget(self)
+        self.layout_info = QFormLayout()
+        self.label_pv = QLabel('108.8', self)
+        self.label_cv = QLabel('75', self)
+        self.label_sp = QLabel('120', self)
+        self.layout_info.addRow('Process Variable:\t\t', self.label_pv)
+        self.layout_info.addRow('Control Variable:\t\t', self.label_cv)
+        self.layout_info.addRow('Set Point:\t\t', self.label_sp)
+        self.widget_info.setLayout(self.layout_info)
 
-broker.start()
-plc_consumer_thread.start()
+        
+        # Prepare Main layout
+        self.layout_main = QGridLayout()
+        self.layout_main.addWidget(self.widget_graph, 0, 0)
+        self.layout_main.addWidget(self.widget_info, 1, 0, Qt.AlignmentFlag.AlignCenter)
+        
+        self.setLayout(self.layout_main)
+        self.show()
 
-try:
-    while broker.is_alive() and plc_consumer_thread.is_alive():
-        time.sleep(1)
-except KeyboardInterrupt:
-    broker.stop()
-    broker.join()
-    plc_consumer_thread.join()
+
+
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    graph = TankGraphWidget()
+    sys.exit(app.exec())
+
+
+
+
