@@ -24,6 +24,6 @@ The rest of items are used in Python environment.<br />
 s7Broker_example.py provides an example of data exchange between a consumer and a PLC.<br />
 s7BrokerSim_example.py simulates communication, but requires only Python to run it.<br />
 
-
+![](https://github.com/schneiderautomatyka/Data-Acquisition-System-for-PLC-s7/blob/main/Icons/imgs/app.png)
 
 
