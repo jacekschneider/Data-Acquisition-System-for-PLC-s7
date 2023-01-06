@@ -255,7 +255,7 @@ class Broker(Thread):
                                                     size=self.offset_stop
                                                     )
                 # Uncomment bellow to log the data
-                # self.log(data_plc, 'logs/plc_data.txt')             
+                # self.log(plc_data, 'logs/plc_data.txt')             
             except RuntimeError:
                 print('Broker> Cant receive data!')
                 # Try to reconnect

@@ -62,12 +62,17 @@ class TankGraphWidget(QWidget):
         
         self.data_line_pv.setData(self.data_time, self.data_pv)
         self.data_line_sp.setData(self.data_time, self.data_sp)
-        self.label_pv.setText(str(data['pv']))
-        self.label_cv.setText(str(data['cv']))
-        self.label_sp.setText(str(data['sp']))
+        self.label_pv.setText(f"{data['pv']}")
+        self.label_cv.setText(f"{data['cv']:.2f}%")
+        self.label_sp.setText(f"{data['sp']}")
         
     def change_interval(self, interval:int):
         self.interval_update = interval
+    
+    def reset(self):
+        self.data_time = [0 for i in range(101)]
+        self.data_pv = [0 for i in self.data_time]
+        self.data_sp = [0 for i in self.data_time]
 
 
 class MainWindow(QMainWindow):
@@ -132,6 +137,9 @@ class MainWindow(QMainWindow):
         del self.broker
         self.btn_reset.setDisabled(True)
         self.btn_start.setDisabled(False)
+        self.widget_tank1.reset()
+        self.widget_tank2.reset()
+        self.widget_tank3.reset()
         
     def update_plots(self):
         try:
@@ -158,7 +166,6 @@ class MainWindow(QMainWindow):
         return data
         
  
-
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = MainWindow()
