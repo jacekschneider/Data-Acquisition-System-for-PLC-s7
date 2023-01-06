@@ -3,7 +3,7 @@ import numpy as np
 import snap7
 import time
 import socket
-from queue import Queue
+from queue import Queue, Full
 from threading import Event, Thread
 
 
@@ -105,7 +105,7 @@ class Broker(Thread):
         super().__init__(*args, **kwargs)
         self.config_file_path = config_file_path
         self.plc_client = snap7.client.Client()
-        self.broker_queue = Queue()
+        self.broker_queue = Queue(1)
         self.broker_stop_event = Event()
         self.additional_offset = None
         self.offset_start = None
@@ -185,6 +185,10 @@ class Broker(Thread):
     def verify_configuration(self):
         self.verify_config_params()
         self.verify_communication_params()
+    
+    def get_values(self):
+        self.verify_config_params()
+        return self.df_values[['Value','Name']].copy().set_index('Name')
         
     def log(self, plc_data:bytearray, path:str='plc_data.txt'):
         with open(path, 'a+') as f:
@@ -264,7 +268,11 @@ class Broker(Thread):
                     value = s7frame_extract(plc_data, offset, data_type)
                     self.df_values['Value'].loc[offset] = value
                 result = self.df_values[['Value','Name']].copy().set_index('Name')
-                self.broker_queue.put_nowait(result)
+                try:
+                    self.broker_queue.put_nowait(result)
+                except Full:
+                    self.broker_queue.get_nowait()
+                    self.broker_queue.put_nowait(result)
                 
             finally:
                 time.sleep(self.interval_s)            
@@ -293,9 +301,15 @@ class BrokerSim(Broker):
                         value = s7frame_extract(plc_data, offset, data_type)
                         self.df_values['Value'].loc[offset] = value
                     result = self.df_values[['Value','Name']].copy().set_index('Name')
-                    self.broker_queue.put_nowait(result)
+                    try: self.broker_queue.put_nowait(result)
+                    except Full:
+                        self.broker_queue.get_nowait()
+                        self.broker_queue.put_nowait(result)
                     time.sleep(1)
-            self.broker_queue.put_nowait('kill consumer')
+            try: self.broker_queue.put_nowait('kill consumer')
+            except Full:
+                    self.broker_queue.get_nowait()
+                    self.broker_queue.put_nowait(result)
             print('BrokerSim> Simulation is finished') 
             
         except FileNotFoundError:
