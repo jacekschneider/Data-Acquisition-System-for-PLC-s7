@@ -11,7 +11,7 @@ and read data from a datablock.<br /> Its first and only argument is
 a path to a configuration file of non-optimised datablock.<br /> The file must
 have the same structure as a datablock visible in TIA Portal.
 
-There is an option to run s7broker the whole project without any specific hardware,<br />
+There is an option to run the whole project without any specific hardware,<br />
 but there is some software required.<br />
 The essential positions are:
 - TIA Portal v15.1+
