@@ -26,4 +26,5 @@ s7BrokerSim_example.py simulates communication, but requires only Python to run 
 
 ![](https://github.com/schneiderautomatyka/Data-Acquisition-System-for-PLC-s7/blob/main/Icons/imgs/app.png)
 
+![](https://github.com/schneiderautomatyka/Data-Acquisition-System-for-PLC-s7/blob/main/Icons/imgs/tanks.png)
 
