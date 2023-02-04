@@ -26,19 +26,19 @@ s7_additional_offset = {
     'Bool' : 0,     
 }
 
-def s7clear_logs(path:str):
+def clear_logs(path:str) -> None:
     try:
         open(path,'w').close()
     except:
         print(f'Could not clear a file on path: {path}')
         
-def s7frame_get_byte(buffer:bytearray, index:int):
-    return buffer[index]
+def get_byte(s7frame:bytearray, index:int):
+    return s7frame[index]
 
-def s7frame_get_bytes(s7frame:bytearray, indexStart:int, indexStop:int):
+def get_bytes(s7frame:bytearray, indexStart:int, indexStop:int):
     return s7frame[indexStart:indexStop]
 
-def s7frame_get_bit(s7frame:bytearray, indexByte:int, indexBit:int):
+def get_bit(s7frame:bytearray, indexByte:int, indexBit:int):
     '''
     Unpack byte and get bit
     '''
@@ -47,7 +47,7 @@ def s7frame_get_bit(s7frame:bytearray, indexByte:int, indexBit:int):
     bit = bits[indexBit] if 0<=indexBit<=7 else None
     return bit
 
-def s7buffer_to_value(buffer, type:str):
+def frombuffer(buffer:bytearray, type:str):
     '''
     s7 defines big-endian coding
     '''
@@ -56,9 +56,9 @@ def s7buffer_to_value(buffer, type:str):
         value = np.frombuffer(buffer, dtype='>i2')
     elif type=='Real':
         value = np.frombuffer(buffer, dtype='>f')
-    return value[0]
+    return value[0] if not value is None else None
 
-def s7frame_extract(s7frame:bytearray, offset:float, data_type:str):
+def extract(s7frame:bytearray, offset:float, data_type:str):
     '''
     Extract value from s7frame
     Offset is an indicator for value's data type 
@@ -79,10 +79,10 @@ def s7frame_extract(s7frame:bytearray, offset:float, data_type:str):
     
     # Get binary data and transform it to the actual value
     if bytes_to_read>0:
-        bytes = s7frame_get_bytes(s7frame, byte_start_index, byte_start_index + bytes_to_read)
-        value = s7buffer_to_value(bytes, data_type)
+        bytes = get_bytes(s7frame, byte_start_index, byte_start_index + bytes_to_read)
+        value = frombuffer(bytes, data_type)
     elif bits_to_read==1:
-        bit = s7frame_get_bit(s7frame, byte_start_index, bit_start_index)
+        bit = get_bit(s7frame, byte_start_index, bit_start_index)
         value = bit      
     return value
 
@@ -265,7 +265,7 @@ class Broker(Thread):
             else:
                 for offset in self.df_values.index:
                     data_type = self.df_values['Data type'].loc[offset]
-                    value = s7frame_extract(plc_data, offset, data_type)
+                    value = extract(plc_data, offset, data_type)
                     self.df_values['Value'].loc[offset] = value
                 result = self.df_values[['Value','Name']].copy().set_index('Name')
                 try:
@@ -298,7 +298,7 @@ class BrokerSim(Broker):
                     plc_data = bytearray(map(int, line[:-1].split(' ')))
                     for offset in self.df_values.index:
                         data_type = self.df_values['Data type'].loc[offset]
-                        value = s7frame_extract(plc_data, offset, data_type)
+                        value = extract(plc_data, offset, data_type)
                         self.df_values['Value'].loc[offset] = value
                     result = self.df_values[['Value','Name']].copy().set_index('Name')
                     try: self.broker_queue.put_nowait(result)

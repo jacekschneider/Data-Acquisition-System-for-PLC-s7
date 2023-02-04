@@ -1,12 +1,12 @@
 # Data-Acquisition-System-for-PLC-s7
 
-The main goal of the project is to collect specified data from s7 PLCs.<br />
+The main goal of the project is to collect specified data from a s7 PLC.<br />
 The PLC is controlling three tanks simulated in Factory I/O.<br />
 In this particular case s7 communication protocol has been proposed.<br />
 
-# s7broker
+# s7Broker
 
-s7broker class provides a small functionality to connect to the plc
+Broker class provides a small functionality to connect to the plc
 and read data from a datablock.<br /> Its first and only argument is
 a path to a configuration file of non-optimised datablock.<br /> The file must
 have the same structure as a datablock visible in TIA Portal.
@@ -16,14 +16,15 @@ but there is some software required.<br />
 The essential positions are:
 - TIA Portal v15.1+
 - Factory I/O
-- Python v3.8+, modules (NumPy, Pandas, snap7)
+- Python v3.*, modules (NumPy, Pandas, snap7, PyQt6)
 - NetToPLCsim
 
 Directory TiaPortalProject contains both plc and factory io files.<br />
 The rest of items are used in Python environment.<br />
 s7Broker_example.py provides an example of data exchange between a consumer and a PLC.<br />
-s7BrokerSim_example.py simulates communication, but requires only Python to run it.<br />
+s7BrokerSim_example.py simulates communication and requires only Python to run it.<br />
 
 ![](https://github.com/schneiderautomatyka/Data-Acquisition-System-for-PLC-s7/blob/main/Icons/imgs/app.png)
 
+![](https://github.com/schneiderautomatyka/Data-Acquisition-System-for-PLC-s7/blob/main/Icons/imgs/tanks.png)
 

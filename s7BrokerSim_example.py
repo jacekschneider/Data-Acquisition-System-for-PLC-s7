@@ -1,4 +1,4 @@
-import s7broker
+import s7comm
 import sys
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (QApplication, QWidget, QPushButton, QLabel, 
@@ -6,7 +6,6 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QPushButton, QLabel,
                              QMainWindow, QMessageBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal as Signal
 from PyQt6.QtGui import QIcon
-
 
 
 
@@ -125,7 +124,7 @@ class MainWindow(QMainWindow):
         self.show()
         
     def start(self):
-        self.broker = s7broker.BrokerSim('logs/plc_data.txt','ExchangeData.xlsx')
+        self.broker = s7comm.BrokerSim('logs/plc_data.txt','ExchangeData.xlsx')
         self.broker.auto_config()
         self.broker.start()
         self.btn_reset.setDisabled(False)
