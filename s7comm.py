@@ -6,7 +6,6 @@ import socket
 from queue import Queue, Full
 from threading import Event, Thread
 
-
 s7_bytes_to_read = {
     'Int'  : 2,
     'Real' : 4,
@@ -27,30 +26,103 @@ s7_additional_offset = {
 }
 
 def clear_logs(path:str) -> None:
+    '''Clear all the data stored in the path.
+    
+    Parameters
+    ----------
+    path : str
+        Path to a file.
+    '''
+    
     try:
         open(path,'w').close()
     except:
         print(f'Could not clear a file on path: {path}')
         
-def get_byte(s7frame:bytearray, index:int):
+def get_byte(s7frame:bytearray, index:int) -> bytearray:
+    '''Get a byte from the s7frame.
+    
+    Parameters
+    ----------
+    s7frame : bytearray
+        S7 protocol frame.
+    index : int
+        Byte index.
+    
+    Returns
+    -------
+    bytearray
+        A single byte within a bytearray.
+    '''
+    
     return s7frame[index]
 
-def get_bytes(s7frame:bytearray, indexStart:int, indexStop:int):
-    return s7frame[indexStart:indexStop]
+def get_bytes(s7frame:bytearray, index_start:int, index_stop:int) -> bytearray:
+    '''Get bytes from the s7frame.
+    
+    Parameters
+    ----------
+    s7frame : bytearray
+        S7 protocol frame.
+    index_start : int
+        Range start index.
+    index_stop : int
+        Range stop index.
+    
+    Returns
+    -------
+    bytearray
+        A byte range within a bytearray.
+    '''
+    
+    return s7frame[index_start:index_stop]
 
-def get_bit(s7frame:bytearray, indexByte:int, indexBit:int):
+def get_bit(s7frame:bytearray, index_byte:int, index_bit:int):
+    '''Unpack a byte and get specified bit.
+    
+    Parameters
+    ----------
+    s7frame : bytearray
+        S7 protocol frame.
+    index_byte : int
+        Index of a byte holding a bit value of interest.
+    index_bit : int
+        Index of a bit in the byte.
+    
+    Returns
+    -------
+    np.uint8
+        Value of the bit if the index_bit is valid (0-7).
+    None
+        Returned if the index_bit is invalid.
     '''
-    Unpack byte and get bit
-    '''
-    byte = np.array(s7frame[indexByte], dtype='uint8')
+    
+    byte = np.array(s7frame[index_byte], dtype='uint8')
     bits = np.unpackbits(byte)
-    bit = bits[indexBit] if 0<=indexBit<=7 else None
+    bit = bits[index_bit] if 0<=index_bit<=7 else None
     return bit
 
 def frombuffer(buffer:bytearray, type:str):
+    '''Transform bytes to a value depending on the type.\n
+    S7 family defines big-endian coding.
+    
+    Parameters
+    ----------
+    buffer : bytearray
+        Bytes to be transformed into a value.
+    type : str
+        Type of the value.
+    
+    Returns
+    -------
+    float
+        If the type was defined as a Real. Real refers to s7 family.
+    int
+        If the type was defines as an Int.
+    None
+        If the type differs from the ones above.
     '''
-    s7 defines big-endian coding
-    '''
+    
     value = None
     if type=='Int':
         value = np.frombuffer(buffer, dtype='>i2')
@@ -58,11 +130,30 @@ def frombuffer(buffer:bytearray, type:str):
         value = np.frombuffer(buffer, dtype='>f')
     return value[0] if not value is None else None
 
-def extract(s7frame:bytearray, offset:float, data_type:str):
+def extract(s7frame:bytearray, offset:float, type:str):
+    '''Extract value from s7frame
+    
+    Parameters
+    ----------
+    s7frame : bytearray
+        S7 protocol frame.
+    offset : float
+        Offset is an indicator for a postion of a value to be extracted.
+    type : str
+        Type of the value.
+    
+    Returns
+    -------
+    float
+        If the type was float
+    int
+        If the type was an int
+    np.uint8
+        If the type was bool
+    None
+        If the type was none of the above
     '''
-    Extract value from s7frame
-    Offset is an indicator for value's data type 
-    '''
+    
     bytes_to_read = 0
     bits_to_read = 0
     bytes = None
@@ -74,13 +165,13 @@ def extract(s7frame:bytearray, offset:float, data_type:str):
     bit_start_index = np.ceil((offset*10-byte_start_index*10)).astype('uint8')
 
     # Change data amount to read according to the s7 data types    
-    bytes_to_read = s7_bytes_to_read[data_type]
-    bits_to_read = s7_bits_to_read[data_type]
+    bytes_to_read = s7_bytes_to_read[type]
+    bits_to_read = s7_bits_to_read[type]
     
     # Get binary data and transform it to the actual value
     if bytes_to_read>0:
         bytes = get_bytes(s7frame, byte_start_index, byte_start_index + bytes_to_read)
-        value = frombuffer(bytes, data_type)
+        value = frombuffer(bytes, type)
     elif bits_to_read==1:
         bit = get_bit(s7frame, byte_start_index, bit_start_index)
         value = bit      
@@ -89,18 +180,44 @@ def extract(s7frame:bytearray, offset:float, data_type:str):
 
 class Broker(Thread):
 
-    '''
-    Broker class
-    It provides a small example of data exchange mechanism between Python and a PLC
+    '''Broker class\n
+    Provides Small example of data exchange mechanism between Python and a PLC.
     
-    Arguments required:
-        - config_file_path (the file contains specified TIA portal db interface)
+    Parameters
+    ----------
+    config_file_path : str
+        A path to the s7 plc data block configuration file in .xlsx format.
+        
+    Attributes
+    ----------
+    config_file_path : str
+        A path to the s7 plc data block configuration file in .xlsx format.
+    plc_client : snap7.client.Client
+        S7 protocol client.
+    broker_queue : queue.Queue
+        Queue to send over messages.
+    broker_stop_event : threading.Event
+        Event to stop the broker.
+    additional_offset : int or None
+        Extra offset value.
+    offset_start : int or None
+        Offset start index.
+    offset_stop : int or None
+        Offset stop index.
+    df_values_created : bool or None
+        True if the df has been created.
+    plc_ip : str or None
+        Plc's ip.
+    datablock_number : int or None
+        DB's number.
+    interval_s : int or None
+        Update time interval in seconds.
     '''
 
     def __init__(self, config_file_path:str, *args, **kwargs):
         '''
-        Save config file path
-        Initialize s7 client
+        Save config file path.\n
+        Initialize s7 client.
         '''
         super().__init__(*args, **kwargs)
         self.config_file_path = config_file_path
@@ -126,7 +243,7 @@ class Broker(Thread):
         
     def prepare_value_frame(self):
         '''
-        Read config file, create new value dataframe
+        Read config file, create new value dataframe.
         '''
         self.df_datablock_plc = pd.read_excel('ExchangeData.xlsx', usecols=['Name', 'Data type', 'Offset', 'Comment'])
         self.df_datablock_plc['Value'] = None
@@ -283,7 +400,16 @@ class Broker(Thread):
             
 
 class BrokerSim(Broker):
+    '''Inherits from s7comm.Broker class.\n
+    It simulates communication and requires only Python to run it.
     
+    Parameters
+    ----------
+    logs_path : str
+        A path to a file containing logged s7 frames.
+    config_file_path : str
+        A path to the s7 plc data block configuration file in .xlsx format.
+    '''
     def __init__(self, logs_path:str, config_file_path:str, *args, **kwargs):
         super().__init__(config_file_path, *args, **kwargs)
         self.logs_path = logs_path
