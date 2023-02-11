@@ -4,7 +4,7 @@ from AWSIoTPythonSDK import MQTTLib
 
 key_path = r"C:\keys/"
 
-endpoint = "a13hmlo850p6sz-ats.iot.eu-central-1.amazonaws.com"
+endpoint = "a37hmlo680f6sz-ats.iot.eu-central-1.amazonaws.com"
 cert_path = key_path + "cert.pem.crt"
 key_private_path = key_path + "PC.private.key"
 ca_cert_path = key_path + "AmazonRootCA1.pem"
