@@ -25,7 +25,7 @@ simple_consumer provides an example of data exchange between a consumer and a PL
 s7_simulator simulates communication and requires only Python to run it.<br />
 aws_iot_publisher describes a mechanism to publish plc data into the AWS cloud.<br />
 
-![](https://github.com/schneiderautomatyka/Data-Acquisition-System-for-PLC-s7/blob/main/Imgs/app.png)
+![](https://github.com/jacekschneider/Data-Acquisition-System-for-PLC-s7/blob/main/Imgs/app.png)
 
-![](https://github.com/schneiderautomatyka/Data-Acquisition-System-for-PLC-s7/blob/main/Imgs/tanks.png)
+![](https://github.com/jacekschneider/Data-Acquisition-System-for-PLC-s7/blob/main/Imgs/tanks.png)
 
